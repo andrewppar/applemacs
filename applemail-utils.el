@@ -11,77 +11,11 @@
 ;;;
 ;;; Code:
 (require 'applescript)
+(require 'apple-db)
+(require 'apple-time)
 (require 'f)
 (require 'eieio)
 (require 'cl)
-
-(defclass applemail/time ()
-  ((date :initarg :date
-	 :documentation "A list of the numerical day month and year")
-   (original :initarg :original
-	     :documentation "The original timestamp")
-   (time :initarg :time
-	 :documentation "A list of the second minute and hour")))
-
-(cl-defmethod applemail-time/parse ((time applemail/time))
-  "Parse the original part of TIME to date and time."
-  (with-slots (original)
-      time
-    (cl-destructuring-bind (seconds minutes hours day month year dow dst utcoff)
-	(parse-time-string original)
-      (set-slot-value time 'date (list day month year))
-      (set-slot-value time 'time (list seconds minutes hours))
-      time)))
-
-(cl-defmethod applemail-time/show ((apple-time applemail/time))
-  "Format the APPLE-TIME with y-m-dTH:M:s."
-  (with-slots (date time)
-      apple-time
-    (when (and date time)
-      (cl-destructuring-bind (day month year)
-	  date
-	(cl-destructuring-bind (seconds minutes hours)
-	    time
-	  (format "%s-%02d-%02dT%02d:%02d:%02d" year month day hours minutes seconds))))))
-
-
-;; todo: we could avoid all this if we just used emacs time representation
-(defun applemail-time--zip-lists (list-one list-two)
-  "Make a list of pairs of items of LIST-ONE and LIST-TWO."
-  (when (and list-one list-two)
-      (cons (list (car list-one) (car list-two))
-	    (applemail-time--zip-lists (cdr list-one) (cdr list-two)))))
-
-(defun applemail-time--comparison (time-one time-two)
-  "Compare TIME-ONE and TIME-TWO.
-Return NIL if they are equal
-Return :more if TIME-ONE is after TIME_TWO
-Return :less if TIME-ONE is before TIME-TWO.
-
-This is private function filled with horror -- look away and don't use."
-  (let* ((date-one (slot-value apple-time-one 'date))
-	 (date-two (slot-value apple-time-two 'date))
-	 (time-one (slot-value apple-time-one 'time))
-	 (time-two (slot-value apple-time-two 'time))
-	 (time-grains-one (cl-concatenate 'list (reverse date-one) (reverse time-one)))
-	 (time-grains-two (cl-concatenate 'list (reverse date-two) (reverse time-two))))
-    (cl-some (lambda (grain-pair)
-	       (cond ((< (car grain-pair) (cadr grain-pair))
-		      :less)
-		     ((> (car grain-pair) (cadr grain-pair))
-		      :more)
-		     (t nil)))
-	     (applemail-time--zip-lists time-grains-one time-grains-two))))
-
-(cl-defmethod applemail-time/earlier?
-    ((apple-time-one applemail/time) (apple-time-two applemail/time))
-  "Return T if APPLE-TIME-ONE happened before APPLE-TIME-TWO."
-  (equal (applemail-time--comparison time-one time-two) :less))
-
-(cl-defmethod applemail-time/later?
-    ((apple-time-one applemail/time) (apple-time-two applemail/time))
-  "Return T if APPLE-TIME-ONE happened after APPLE-TIME-TWO."
-  (equal (applemail-time--comparison time-one time-two) :more))
 
 (defclass applemail/message ()
   ((read :initarg :read
@@ -92,6 +26,8 @@ This is private function filled with horror -- look away and don't use."
 	 :documentation "The time that the message was sent")
    (id :initarg :id
        :documentation "The id apple Mail associates with the message")
+   (mailbox :initarg :mailbox
+	    :documentation "The mailbox URI of the message.")
    (subject :initarg :subject
 	    :documentation "The subject of the message")
    (sender :initarg :sender
@@ -142,10 +78,15 @@ This is private function filled with horror -- look away and don't use."
   "Get the content of MESSAGE."
   (with-slots (id)
       message
-    (let ((file (format "/tmp/mail-%s" id)))
-      (when (file-exists-p file)
-	(set-slot-value message 'content (f-read-text file))
-	message))))
+    (let ((content (apple/execute!
+		    (apple/tell-application
+		     "Mail"
+		     (apple/return
+		      (format "content of first message of inbox whose id is %s" id)))
+		    :message "fetching message..."
+		    :timed? t)))
+      (setf (slot-value message 'content) content)
+      message)))
 
 (cl-defmethod applemail-message/mark-read ((message applemail/message))
   "Mark MESSAGE as read and tell that to Mail."
@@ -174,93 +115,76 @@ This is private function filled with horror -- look away and don't use."
   "Check if MESSAGE-ONE was sent earlier than MESSAGE-TWO."
   (let ((time-one (applemail-message/sent message-one))
 	(time-two (applemail-message/sent message-two)))
-    (applemail-time/earlier? time-one time-two)))
+    (apple-time/earlier-p time-one time-two)))
 
 (defun applemail-message/sent-later? (message-one message-two)
   "Check if MESSAGE-ONE was sent earlier than MESSAGE-TWO."
   (let ((time-one (applemail-message/sent message-one))
 	(time-two (applemail-message/sent message-two)))
-    (applemail-time/later? time-one time-two)))
+    (apple-time/later-p time-one time-two)))
 
 (defun applemail/new-message (id subject sender read received sent)
   "Create a message from ID, SUBJECT, SENDER, READ, RECEIVED, and SENT."
-  (let ((sent-time (applemail-time/parse (applemail/time :original sent)))
-	(rec-time (applemail-time/parse (applemail/time :original received)))
+  (let ((sent-time (apple-time/appletime->emacs sent))
+	(rec-time (apple-time/appletime->emacs received))
 	(read-bool (equal (downcase read) "true")))
-    (applemail/message :id id :subject subject :sender sender
-		       :read read-bool :sent sent-time :received rec-time)))
+    (applemail/message :id (format "%s" id)
+		       :subject subject
+		       :sender sender
+		       :read read-bool
+		       :sent sent-time
+		       :received rec-time)))
 
-(defun applemail--script->json-and-quit (script)
-  "Run SCRIPT - convert its output to json, and quit mail when done."
-  (let* ((raw-messages (apple/execute!
-			script :message "fetching mail..." :timed? t))
-	 (result (json-parse-string (thread-last raw-messages
-						 string-trim
-						 (format "[%s]")
-						 (string-replace "\n" "\\n"))
-				    :object-type 'plist)))
-    (apple/execute! (apple/tell-application "Mail" "quit"))
-    result))
+(defun applemail--get-messages-json (limit offset unread-only? mailbox)
+  "Get messages from INBOX.
+LIMIT: the max number of messages to return (defaults to 144)
+OFFSET: an offset to start from
+UNREAD-ONLY?: whether or not to include read messages
+MAILBOX: the name of a mailbox to limit the search to"
+  (let ((limit (or limit 100))
+	(read-clause (when unread-only? "read = 0"))
+	(mailbox-clause (when mailbox (concat "mailboxes.url like '%" mailbox "%'"))))
+    (apple-db/execute!
+     *apple-db/mail-db*
+     (apple-db/query
+      (apple-db/select
+       (list
+	(apple-db/column "messages" "ROWID" :as "id")
+	(apple-db/column "messages" "read" :as "read")
+	(apple-db/column "messages" "date_received" :as "received")
+	(apple-db/column "messages" "date_sent" :as "sent")
+	(apple-db/column "addresses" "address" :as "sender")
+	(apple-db/column "subjects" "subject" :as "subject")
+	(apple-db/column "mailboxes" "url" :as "mailbox")))
+      (apple-db/from "messages")
+      (apple-db/join "addresses" :on "messages.sender = addresses.ROWID")
+      (apple-db/join "subjects" :on "messages.subject = subjects.ROWID")
+      (apple-db/join "mailboxes" :on "messages.mailbox = mailboxes.ROWID")
+      (apple-db/where (string-join
+		       (remove nil (list "deleted = 0" read-clause mailbox-clause))
+		       " and "))
+      (apple-db/order-by (list "date_received" :desc))
+      (apple-db/limit :limit limit :offset offset)))))
 
-(defun applemail--get-messages-json (limit offset)
-  "Get the messages from inbox with LIMIT and OFFSET as JSON plists."
-  (let ((message-restriction (format "messages %s through %s of inbox" offset limit)))
-    (applemail--script->json-and-quit
-     (apple/progn
-      (apple/defun
-       "escapeQuotes" (list "theText")
-       (apple/set "theResult" "theText")
-       (apple/set "astid" "AppleScript's text item delimiters")
-       (apple/set "AppleScript's text item delimiters" "quote")
-       (apple/set "theResult" "text items of theResult")
-       (apple/set "AppleScript's text item delimiters" "\"\\\\\" & quote")
-       (apple/set "theResult" "theResult as text")
-       (apple/set "AppleScript's text item delimiters" "astid")
-       (apple/return "theResult"))
-      (apple/defun
-       "writeTextToFile" (list "theText" "theFile")
-       (apple/try
-	(apple/progn
-	 (apple/set "posixFile" "POSIX path of theFile")
-	 (apple/set "fhandle" "open for access posixFile with write permission")
-	 "write theText to fhandle as «class utf8»"
-	 "close access fhandle"
-	 (apple/return "true"))
-	(apple/progn
-	 (apple/try "close access posixFile")
-	 (apple/return "false"))))
-      (apple/tell-application
-       "Mail"
-       (apple/set "theResult" (apple/make-list))
-       (apple/set "theMessages" message-restriction)
-       (apple/dolist
-	"theMessage" "theMessages"
-	(apple/progn
-	 (apple/set "theFilePath" "\"/tmp/mail-\" & id of theMessage")
-	 (apple/set "theContent" "content of theMessage")
-	 (apple/set
-	  "end of theResult"
-	  (apple/->json
-	   '(("subject" .  "my escapeQuotes(subject of theMessage)")
-	     ("id" . "id of theMessage")
-	     ("sender". "my escapeQuotes(sender of theMessage)")
-	     ("sent" . "date sent of theMessage")
-	     ("read" . "read status of theMessage")
-	     ("received" . "date received of theMessage"))))
-	 "my writeTextToFile(theContent, theFilePath)"))
-       (apple/return "theResult"))))))
-
-(cl-defun applemail/get-messages (&key limit offset)
+(cl-defun applemail/get-messages
+    (&key limit offset mailbox unread-only?)
   "Get messages from inbox with LIMIT and OFFSET."
   (let* ((defaulted-offset (or offset 1))
 	 (corrected-limit (+ (or limit 500) (- defaulted-offset 1))))
     (mapcar
      (lambda (message)
        (cl-destructuring-bind
-	     (&key id subject sender read received sent &allow-other-keys)
+	     (&key id subject sender read received sent mailbox &allow-other-keys)
 	   message
-	 (applemail/new-message id subject sender read received sent)))
-     (applemail--get-messages-json corrected-limit defaulted-offset))))
+	 (applemail/new-message
+	  id
+	  subject
+	  sender
+	  (if (= read 1) "true" "false")
+	  (decode-time received)
+	  (decode-time sent))))
+     (applemail--get-messages-json
+      corrected-limit defaulted-offset unread-only? mailbox))))
 
 (cl-defun applemail/search-messages (search-term &key search-field limit)
   "Return any messages whose subject matches SEARCH-TERM.

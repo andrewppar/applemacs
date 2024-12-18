@@ -73,7 +73,7 @@
 	(cond ((equal specifier :null)
 	       (push event result))
 	      ((and (not (equal rend_date :null))
-		    (apple-time/date-earlier-p rend_date decoded-start))
+		    (apple-time/earlier-p rend_date decoded-start))
 	       result)
 	      (t (let* ((stop-date (or decoded-end
 				       (decoded-time-add
@@ -87,10 +87,10 @@
 				  start_date stop-date specifier frequency interval xdates))
 		     (when (and
 			    (or ;; this could probably be it's own function...
-			     (apple-time/date-earlier-p decoded-start date)
-			     (apple-time/date-equal-p decoded-start date))
+			     (apple-time/earlier-p decoded-start date)
+			     (apple-time/equal-p decoded-start date))
 			    (or (not decoded-end)
-				(apple-time/date-earlier-p date decoded-end)))
+				(apple-time/earlier-p date decoded-end)))
 		       (cl-destructuring-bind (_sec _min _hr day month year &rest _other)
 			   date
 			 (let* ((new-start (applecal-events--make-date-from-date-time
