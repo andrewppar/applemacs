@@ -46,7 +46,9 @@
 	(dolist (field '(id sent subject sender))
 	  (let* ((in-slot (slot-value message field))
 		 (value (if (equal field 'sent)
-			    (length (applemail-time/show in-slot))
+			    (length (format-time-string
+				     "%Y-%m-%dT%H:%M:%s"
+				     (encode-time in-slot)))
 			  (length in-slot))))
 	    (when (>= value (alist-get field field->max-value-size 0))
 	      (setf (alist-get field field->max-value-size) value)))))))
@@ -116,7 +118,10 @@
       inbox-messages
     (let ((current-offset (max (- (length messages) 1) 0)))
       (applemail-ui-inbox-messages/push-all
-       (applemail/get-messages :offset current-offset :limit 20)
+       (applemail/get-messages
+	:offset current-offset
+	:limit 50
+	:mailbox "all")
        inbox-messages))
     inbox-messages))
 
@@ -209,7 +214,7 @@
 			    (format "%s    ")))
 	     (subject-text (applemail-ui--format-for-max
 			    subject (min (alist-get 'subject field->max) 100)))
-	     (sent-text (applemail-time/show sent))
+	     (sent-text (format-time-string "%Y-%m-%dT%H:%M:%s" (encode-time sent)))
 	     (sender-text (applemail-ui--format-for-max
 			   sender (min (alist-get 'sender field->max) 60)))
 	     (row (list (format "%s" id) read-status subject-text sender-text sent-text)))
@@ -340,8 +345,6 @@ Optionally fetch new ones with FETCH-NEW?"
     (applemail-ui-inbox-messages/remove-marked-message
      message *applemail-ui/inbox-messages*)
     (applemail-ui--mark-message-row t)))
-
-(defun applemail-display/mark-as-read-marked ()
 
 (defun applemail-display/open-in-mail ()
   "View the messsage at point in the Mail app."
