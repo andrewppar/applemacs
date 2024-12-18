@@ -187,7 +187,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 	(setq interval-count (+ interval-count 1))))
     (reverse result)))
 
-(defun apple-time/date-equal-p (decoded-time-one decoded-time-two)
+(defun apple-time/equal-p (decoded-time-one decoded-time-two)
   "Check if the date of DECODED-TIME-ONE is the same as DECODED-TIME-TWO."
   (cl-destructuring-bind (_sec _min _hour day-one month-one year-one &rest _other)
       decoded-time-one
@@ -203,7 +203,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 Matches on DAY, MONTH, and YEAR, but nothing else."
   (let ((excluded? nil))
     (dolist (exclusion-date exclusion-dates)
-      (when (apple-time/date-equal-p date exclusion-date)
+      (when (apple-time/equal-p date exclusion-date)
 	(setq excluded? t)))
     excluded?))
 

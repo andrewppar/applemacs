@@ -101,7 +101,7 @@
        (applemail/get-messages
 	:offset current-offset
 	:limit 50
-	:mailbox "all")
+	:mailbox "inbox")
        inbox-messages))
     inbox-messages))
 
@@ -295,8 +295,6 @@ Optionally fetch new ones with FETCH-NEW?"
       (switch-to-buffer *applemail-inbox-buffer*)
       (applemail-display/refresh-inbox))))
 
-<<<<<<< HEAD
-=======
 (defun applemail-ui--mark-message-row (unmark?)
   (let* ((line-start (save-excursion (beginning-of-line) (point)))
 	 (line-end (save-excursion (end-of-line) (point)))
@@ -328,7 +326,6 @@ Optionally fetch new ones with FETCH-NEW?"
      message *applemail-ui/inbox-messages*)
     (applemail-ui--mark-message-row t)))
 
->>>>>>> use-apple-db
 (defun applemail-display/open-in-mail ()
   "View the messsage at point in the Mail app."
   (interactive)
