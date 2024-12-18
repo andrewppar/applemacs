@@ -13,7 +13,7 @@
 (require 'applescript)
 (require 'f)
 (require 'eieio)
-(require 'cl-lib)
+(require 'cl)
 
 (defclass applemail/time ()
   ((date :initarg :date
@@ -29,8 +29,8 @@
       time
     (cl-destructuring-bind (seconds minutes hours day month year dow dst utcoff)
 	(parse-time-string original)
-      (setf (slot-value time 'date) (list day month year))
-      (setf (slot-value time 'time)  (list seconds minutes hours))
+      (set-slot-value time 'date (list day month year))
+      (set-slot-value time 'time (list seconds minutes hours))
       time)))
 
 (cl-defmethod applemail-time/show ((apple-time applemail/time))
@@ -43,6 +43,7 @@
 	(cl-destructuring-bind (seconds minutes hours)
 	    time
 	  (format "%s-%02d-%02dT%02d:%02d:%02d" year month day hours minutes seconds))))))
+
 
 ;; todo: we could avoid all this if we just used emacs time representation
 (defun applemail-time--zip-lists (list-one list-two)
@@ -58,10 +59,10 @@ Return :more if TIME-ONE is after TIME_TWO
 Return :less if TIME-ONE is before TIME-TWO.
 
 This is private function filled with horror -- look away and don't use."
-  (let* ((date-one (slot-value time-one 'date))
-	 (date-two (slot-value time-two 'date))
-	 (time-one (slot-value time-one 'time))
-	 (time-two (slot-value time-two 'time))
+  (let* ((date-one (slot-value apple-time-one 'date))
+	 (date-two (slot-value apple-time-two 'date))
+	 (time-one (slot-value apple-time-one 'time))
+	 (time-two (slot-value apple-time-two 'time))
 	 (time-grains-one (cl-concatenate 'list (reverse date-one) (reverse time-one)))
 	 (time-grains-two (cl-concatenate 'list (reverse date-two) (reverse time-two))))
     (cl-some (lambda (grain-pair)
@@ -75,17 +76,17 @@ This is private function filled with horror -- look away and don't use."
 (cl-defmethod applemail-time/earlier?
     ((apple-time-one applemail/time) (apple-time-two applemail/time))
   "Return T if APPLE-TIME-ONE happened before APPLE-TIME-TWO."
-  (equal (applemail-time--comparison apple-time-one apple-time-two) :less))
+  (equal (applemail-time--comparison time-one time-two) :less))
 
 (cl-defmethod applemail-time/later?
     ((apple-time-one applemail/time) (apple-time-two applemail/time))
   "Return T if APPLE-TIME-ONE happened after APPLE-TIME-TWO."
-  (equal (applemail-time--comparison apple-time-one apple-time-two) :more))
+  (equal (applemail-time--comparison time-one time-two) :more))
 
 (defclass applemail/message ()
   ((read :initarg :read
 	 :documentaion "Whether or not the message has been read.")
-   (received :initarg :received
+   (receieved :initarg :received
 	      :documentation "The time that the message was received")
    (sent :initarg :sent
 	 :documentation "The time that the message was sent")
@@ -143,7 +144,7 @@ This is private function filled with horror -- look away and don't use."
       message
     (let ((file (format "/tmp/mail-%s" id)))
       (when (file-exists-p file)
-	(setf (slot-value message 'content) (f-read-text file))
+	(set-slot-value message 'content (f-read-text file))
 	message))))
 
 (cl-defmethod applemail-message/mark-read ((message applemail/message))
@@ -155,17 +156,7 @@ This is private function filled with horror -- look away and don't use."
       "Mail"
       (apple/set
        (format "read status of every message of inbox whose id is %s" id) "true")))
-    (setf (slot-value message 'read) t)
-    message))
-
-(cl-defmethod applemail-message/delete ((message applemail/message))
-  "Delete MESSAGE from Mail."
-  (with-slots (id)
-      message
-    (apple/execute!
-     (apple/tell-application
-      "Mail"
-      (format "delete every message of inbox whose id is %s" id)))
+    (set-slot-value message 'read t)
     message))
 
 (cl-defmethod applemail-message/open ((message applemail/message))

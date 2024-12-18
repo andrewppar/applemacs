@@ -24,8 +24,6 @@
 			  :initform '())
    (selected-message :type applemail/message
 		     :documentation "The selected message of the inbox.")
-   (marked-messages :type list
-		    :initform '())
    (max-size :initarg :maxsize
 	     :type number
 	     :initform 50
@@ -67,26 +65,8 @@
 (cl-defmethod applemail-ui-inbox-messages/set-selected-message
     (message (inbox-messages applemail-ui/inbox-messages))
   "Set the selected message of INBOX-MESSAGES to MESSAGE."
-  (setf (slot-value inbox-messages 'selected-message) message)
+  (set-slot-value inbox-messages 'selected-message message)
   inbox-messages)
-
-(cl-defmethod applemail-ui-inbox-messages/marked-messages
-    ((inbox-messages applemail-ui/inbox-messages))
-  "Get the marked messages for the current inbox."
-  (slot-value inbox-messages 'marked-messages))
-
-(cl-defmethod applemail-ui-inbox-messages/push-marked-message
-    (message (inbox-messages applemail-ui/inbox-messages))
-  (let* ((marks (applemail-ui-inbox-messages/marked-messages inbox-messages))
-	 (new-marks (if (member message marks) marks (cons message marks))))
-    (setf (slot-value inbox-messages 'marked-messages) new-marks)
-    inbox-messages))
-
-(cl-defmethod applemail-ui-inbox-messages/remove-marked-message
-    (message (inbox-messages applemail-ui/inbox-messages))
-  (let* ((marks (applemail-ui-inbox-messages/marked-messages inbox-messages)))
-    (setf (slot-value inbox-messages 'marked-messages) (remove message marks))
-    inbox-messages))
 
 (cl-defmethod applemail-ui-inbox-messages/get-message-by-id
     (id (inbox-messages applemail-ui/inbox-messages))
@@ -310,39 +290,6 @@ Optionally fetch new ones with FETCH-NEW?"
       (switch-to-buffer *applemail-inbox-buffer*)
       (applemail-display/refresh-inbox))))
 
-(defun applemail-ui--mark-message-row (unmark?)
-  (let* ((line-start (save-excursion (beginning-of-line) (point)))
-	 (line-end (save-excursion (end-of-line) (point)))
-	 (fields (split-string (buffer-substring line-start line-end) "|"))
-	    ;; 77 = M 32 = " "
-	 (mark-char (if unmark? 32 77)))
-    (when-let ((status (cadr fields)))
-      (aset status 1 mark-char)
-      (save-excursion
-	(with-inhibit-read-only
-	  (goto-char line-start)
-	  (kill-region line-start line-end)
-	  (insert (string-join fields "|")))))))
-
-(defun applemail-ui--apply-mark-unread ()
-  (let ((line-count (car (buffer-line-statistics))))))
-
-(defun applemail-display/mark-message ()
-  (interactive)
-  (when-let ((message (applemail-ui--message-at-point)))
-    (applemail-ui-inbox-messages/push-marked-message
-     message *applemail-ui/inbox-messages*)
-    (applemail-ui--mark-message-row nil)))
-
-(defun applemail-display/unmark-message ()
-  (interactive)
-  (when-let ((message (applemail-ui--message-at-point)))
-    (applemail-ui-inbox-messages/remove-marked-message
-     message *applemail-ui/inbox-messages*)
-    (applemail-ui--mark-message-row t)))
-
-(defun applemail-display/mark-as-read-marked ()
-
 (defun applemail-display/open-in-mail ()
   "View the messsage at point in the Mail app."
   (interactive)
@@ -351,7 +298,7 @@ Optionally fetch new ones with FETCH-NEW?"
     (cond ((equal current-buffer-name *applemail-inbox-buffer*)
 	   (setq message (applemail-ui--message-at-point)))
 	  ((equal current-buffer-name *applemail-message-buffer*)
-	   (setq message (applemail-ui-inbox-messages/selected-message
+	   (setq messsage (applemail-ui-inbox-messages/selected-message
 			   *applemail-ui/inbox-messages*)))
 	  (t nil))
     (when message
@@ -361,8 +308,6 @@ Optionally fetch new ones with FETCH-NEW?"
   (kbd "RET") 'applemail-display/open-message
   "q" 'applemail-display/inbox-quit
   "r" 'applemail-display/refresh-inbox
-  "m" 'applemail-display/mark-message
-  "u" 'applemail-display/unmark-message
   "o" 'applemail-display/open-in-mail
   "f" (lambda () (interactive) (applemail-display/refresh-inbox t)))
 
