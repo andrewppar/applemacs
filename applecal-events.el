@@ -58,43 +58,50 @@
       encode-time
       decode-time)))
 
+;; this needs to account for changes to occurrences :/
+;; so we have (seq-filter (lambda (event) (equal (plist-get event :orig_item_id) 1721)) *events*)
+;; where an original item _I think_ has an orig_item_id of 0
+;; we then need to *replace* occurrences in a projection with the changes.....
+
 (defun applecal-events--filter-projected-events (decoded-start decoded-end events)
-  "Filter out any projected EVENTS that are not in DECODED-START to DECODED-END window."
+  "Filter out EVENTS that are not in DECODED-START to DECODED-END window."
   (let ((result  '()))
     (dolist (event events)
       (cl-destructuring-bind
 	    (&key rend_date xdate frequency interval specifier start_date end_date &allow-other-keys)
 	  event
-	(if (equal specifier :null)
-	    (push event result)
-	  (let* ((stop-date (or decoded-end
-				rend_date
-				(decoded-time-add
-				 decoded-start (make-decoded-time :day 10))))
+	(cond ((equal specifier :null)
+	       (push event result))
+	      ((and (not (equal rend_date :null))
+		    (apple-time/earlier-p rend_date decoded-start))
+	       result)
+	      (t (let* ((stop-date (or decoded-end
+				       (decoded-time-add
+					decoded-start (make-decoded-time :day 10))))
 
-		 (xdates '()))
-	    (dolist (exclude (json-parse-string xdate :array-type 'list))
-	      (unless (equal exclude :null)
-		(push (apple-time/appletime->emacs exclude) xdates)))
-	    (dolist (date (apple-time/project-dates
-			   start_date stop-date specifier frequency interval xdates))
-	      (when (and
-		     (or ;; this could probably be it's own function...
-		      (apple-time/date-earlier-p decoded-start date)
-		      (apple-time/date-equal-p decoded-start date))
-		     (or (not decoded-end)
-			 (apple-time/date-earlier-p date decoded-end)))
-		(cl-destructuring-bind (_sec _min _hr day month year &rest _other)
-		    date
-		  (let* ((new-start (applecal-events--make-date-from-date-time
-				     start_date day month year))
-			 (new-end (applecal-events--make-date-from-date-time
-				   end_date day month year))
-			 (new-event  (thread-first
-				       (cl-copy-list event)
-				       (plist-put :start_date new-start)
-				       (plist-put :end_date new-end))))
-		    (push new-event result)))))))))
+			(xdates '()))
+		   (dolist (exclude (json-parse-string xdate :array-type 'list))
+		     (unless (equal exclude :null)
+		       (push (apple-time/appletime->emacs exclude) xdates)))
+		   (dolist (date (apple-time/project-dates
+				  start_date stop-date specifier frequency interval xdates))
+		     (when (and
+			    (or ;; this could probably be it's own function...
+			     (apple-time/earlier-p decoded-start date)
+			     (apple-time/equal-p decoded-start date))
+			    (or (not decoded-end)
+				(apple-time/earlier-p date decoded-end)))
+		       (cl-destructuring-bind (_sec _min _hr day month year &rest _other)
+			   date
+			 (let* ((new-start (applecal-events--make-date-from-date-time
+					    start_date day month year))
+				(new-end (applecal-events--make-date-from-date-time
+					  end_date day month year))
+				(new-event  (thread-first
+					      (cl-copy-list event)
+					      (plist-put :start_date new-start)
+					      (plist-put :end_date new-end))))
+			   (push new-event result))))))))))
     result))
 
 (defun applecal-events--equal? (event-one event-two)
@@ -204,7 +211,7 @@ START-DATE are gathered."
 
 (defun applecal-events/add
     (title description start-date start-time duration)
-  "Add event with TITLE, DESCRIPTION, START-DATE, START-TIME, and DURATION to apple calendar."
+  "Add event with TITLE, DESCRIPTION, START-DATE, START-TIME, and DURATION."
   (let ((properties (apple/make-properties
 		     "description" (apple/quote description)
 		     "summary" (apple/quote title)

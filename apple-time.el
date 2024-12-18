@@ -126,10 +126,17 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
   "Parse SPECIFIER into repetition and weekday specifiers."
   (mapcar #'apple-time--parse-weekday-specifier (split-string specifier ",")))
 
-(defun apple-time/date-earlier-p (date-one date-two)
+(defun apple-time-->seconds (date)
+  "Convert date to seconds after epoch."
+  (thread-last date encode-time (format-time-string "%s") string-to-number))
+
+(defun apple-time/earlier-p (date-one date-two)
   "Check if DATE-ONE is earlier than DATE-TWO."
-  (< (string-to-number (format-time-string "%s" (encode-time date-one)))
-     (string-to-number (format-time-string "%s" (encode-time date-two)))))
+  (< (apple-time-->seconds date-one) (apple-time-->seconds date-two)))
+
+(defun apple-time/later-p (date-one date-two)
+  "Check if DATE-ONE is later than DATE-TWO."
+  (> (apple-time-->seconds date-one) (apple-time-->seconds date-two)))
 
 (defun apple-time--project-day-by-spec-one-step (date spec)
   "Project one step DATE by SPEC."
@@ -149,7 +156,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 	     (current-year (decoded-time-year date))
 	     (current-nth (apple-time--nth-weekday-of-month
 			   current-month current-year target-weekday repeat)))
-	(if (and current-nth (apple-time/date-earlier-p date current-nth))
+	(if (and current-nth (apple-time/earlier-p date current-nth))
 	    current-nth
 	  (let ((result nil))
 	    (while (not result)
@@ -164,7 +171,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 (defun apple-time--project-date-by-specifier (start-date end-date spec)
   "Project START-DATE until END-DATE with SPEC."
   (let ((result (list start-date)))
-    (while (apple-time/date-earlier-p (car result) end-date)
+    (while (apple-time/earlier-p (car result) end-date)
       (push (apple-time--project-day-by-spec-one-step (car result) spec) result))
     result))
 
@@ -180,7 +187,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 	(setq interval-count (+ interval-count 1))))
     (reverse result)))
 
-(defun apple-time/date-equal-p (decoded-time-one decoded-time-two)
+(defun apple-time/equal-p (decoded-time-one decoded-time-two)
   "Check if the date of DECODED-TIME-ONE is the same as DECODED-TIME-TWO."
   (cl-destructuring-bind (_sec _min _hour day-one month-one year-one &rest _other)
       decoded-time-one
@@ -196,7 +203,7 @@ E.g. 3rd thursday of october 2024 => (0 0 0 17 10 2024...)"
 Matches on DAY, MONTH, and YEAR, but nothing else."
   (let ((excluded? nil))
     (dolist (exclusion-date exclusion-dates)
-      (when (apple-time/date-equal-p date exclusion-date)
+      (when (apple-time/equal-p date exclusion-date)
 	(setq excluded? t)))
     excluded?))
 
@@ -216,14 +223,14 @@ Matches on DAY, MONTH, and YEAR, but nothing else."
 	 (start-year (decoded-time-year start-date))
 	 (start-monthday (apple-time--nth-day-of-month
 			  start-month start-year daynum))
-	 (seed-date (if (apple-time/date-earlier-p
+	 (seed-date (if (apple-time/earlier-p
 			 start-monthday start-date)
 			(apple-time--nth-day-of-month
 			 (if (= start-month 12) 1 (+ 1 start-month))
 			 (if (= start-month 12) (+ 1 start-year) start-year)
 			 daynum)))
 	 (result (list seed-date)))
-    (while (apple-time/date-earlier-p (car result) end-date)
+    (while (apple-time/earlier-p (car result) end-date)
       (let ((current-month (decoded-time-month (car result)))
 	    (current-year (decoded-time-year (car result))))
 	(push
@@ -253,7 +260,7 @@ Matches on DAY, MONTH, and YEAR, but nothing else."
   ;; The other component indicates how to interpret the first component..
   ;; see https://github.com/ajrosen/icalPal/blob/564851a4e6629919ef189a1d0c55cfcc876380d2/lib/event.rb#L198
   (let ((result (list start-date)))
-    (while (apple-time/date-earlier-p (car result) end-date)
+    (while (apple-time/earlier-p (car result) end-date)
       (thread-first
 	result
 	car
