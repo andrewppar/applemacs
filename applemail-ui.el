@@ -84,13 +84,13 @@
   (with-slots (marked-messages messages) inbox-messages
     (mapc #'applemail-message/delete marked-messages)
     (let* ((marked-ids (mapcar #'applemail-message/id marked-messages))
-	   (kept-messages (filter
+	   (kept-messages (seq-filter
 			   (lambda (message)
 			     (with-slots (id) message
 			       (not (member id marked-ids))))
 			   messages)))
       (setf (slot-value inbox-messages 'messages) kept-messages)
-      (setf (slot-value inbox-messages 'marked-mesages) '())))
+      (setf (slot-value inbox-messages 'marked-messages) '())))
   inbox-messages)
 
 (cl-defmethod applemail-ui-inbox-messages/push-all
@@ -304,6 +304,7 @@ Optionally fetch new ones with FETCH-NEW?"
 
 (defun applemail-display/delete-marked ()
   "Delete any marked messages."
+  (interactive)
   (when (y-or-n-p "Are you sure you want to delete marked messages?")
     (applemail-ui-inbox-messages/delete-marked *applemail-ui/inbox-messages*)
     (applemail-display/refresh-inbox nil)))
