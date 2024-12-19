@@ -1,0 +1,95 @@
+#+title: ApplEmacs
+#+author: anparisi
+#+email: andrew.p.parisi@gmail.com
+#+date: 12-19-2024
+
+* What
+
+Manage (mostly read) apple mail and calendar from within emacs
+
+* Why
+
+Most of my organizational workflow is in org. So being able to get my calendar events there is way easier. I like terminal mail, but my current organization doesn't let me hook into it with any of the usual tools. So here's my terminal mail.
+
+* Quickstart
+
+This is only available on github for now (sorry =m-x package-install= users). With straight you can install it with a recipe like this:
+
+=(applemacs :host github :repo "andrewppar/applemacs")=
+
+If you use =use-package= and =straight= you can do something like
+
+#+name: install
+#+begin_src emacs-lisp
+  (use-package applemacs
+      :straight (applemacs :type git :host github :repo "andrewppar/applemacs"))
+#+end_src
+
+The database location for mail and calendar also need to be configured. They are stored in =*apple-db/ical-db*= and =*apple-db/mail-db*=. So for my configuration I have:
+
+#+name: db-settings
+#+begin_src emacs-lisp
+(setq *apple-db/ical-db* "~/Library/Calendars/Calendar.sqlitedb"
+	*apple-db/mail-db* "~/Library/Mail/V10/MailData/Envelope\\ Index")
+#+end_src
+
+* Configuration
+
+Besides the databases mentioned above.
+
+** Calendar
+- =*applcal-events/calendars*=: the list of calendars you care about. I only care about the one named ="Calendar"= but there were a lot more on my system for some reason
+- =*applecal-evens/custom-filter*=: a function that filters out events. Unfortunately, this needs a lot more documentation. The function takes an =event= and returns a boolean. Here's mine:
+
+#+name: example-filter
+#+begin_src emacs-lisp
+  (lambda (event)
+    (not (equal (plist-get event :title) "Ignored Event")))
+#+end_src
+
+* Keys and Bindings
+
+** Mail
+
+- =applemail/inbox=: display your inbox based on =*apple-db/mail-db*=
+
+Mail has some bindings out of the box:
+
+*** Inbox
+|-------+-----------------------------------------------------------------+-----------------------------------------|
+| key   | function                                                        | description                             |
+|-------+-----------------------------------------------------------------+-----------------------------------------|
+| =RET= | =applemail-display/open-message=                                | open the message at point               |
+| =D=   | =applemail-display/delete-marked=                               | delete all marked messages              |
+| =f=   | =(lambda () (interactive) (applemail-display/refresh-inbox t))= | fetch 50 more messages limit 500        |
+| =m=   | =applemail-display/mark-message=                                | mark the message at point               |
+| =o=   | =applemail-display/open-in-mail=                                | open the message at point in Apple Mail |
+| =q=   | =applemail-display/inbox-quit=                                  | quit                                    |
+| =r=   | =applemail-display/refresh-inbox=                               | refresh the inbox                       |
+| =u=   | =applemail-display/unmark-message=                              | unmark the mesage at point              |
+|-------+-----------------------------------------------------------------+-----------------------------------------|
+
+*** Message
+
+|-----+-----------------------------------+----------------------------------------|
+| key | function                          | description                            |
+|-----+-----------------------------------+----------------------------------------|
+| =o= | =applemail-display/open-in-mail=  | open the visible message in Apple Mail |
+| =q= | =applemail-display/message-close= | close the visible message              |
+|-----+-----------------------------------+----------------------------------------|
+
+** Calendar
+
+There isn't really a user interface for this. So no key bindings.
+I use it to populate org mode files.
+
+Here's the API
+
+- =applecal/add-event=: Add an event with TITLE, DESCRIPTION, START-DATE, START-TIME, and DURATION
+- =applecal/delete-event=: This is sort of tricky. It finds events to delete based on TITLE, START-DATE, and START-TIME
+- =applecal/todays-events=: Get a list of the events that are happening today
+- =applecal/next-weeks-events=: Get a list of the events that are happening in the next seven days
+
+* Other Stuff
+
+I don't have anything else now. I'm definitely open to help, comments, angry suggestions, etc.
