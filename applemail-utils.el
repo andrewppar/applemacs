@@ -76,22 +76,31 @@
 
 (cl-defmethod applemail-message/fetch-content ((message applemail/message))
   "Get the content of MESSAGE."
-  (with-slots (id)
-      message
+  (with-slots (id) message
     (let ((content (apple/execute!
 		    (apple/tell-application
 		     "Mail"
-		     (apple/return
-		      (format "content of first message of inbox whose id is %s" id)))
-		    :message "fetching message..."
+		     (apple/set "theMessage" (format "first message of inbox whose id id %s" id))
+		     (apple/return "content of theMessage"))
+		    :message "fetching message content..."
 		    :timed? t)))
       (setf (slot-value message 'content) content)
       message)))
 
+(cl-defmethod applemail-message/delete ((message applemail/message))
+  (with-slots (id) message
+    (apple/execute!
+     (apple/tell-application
+      "Mail"
+      (apple/set "theMessage" (format "first message of inbox whose id is %s" id))
+      (apple/set "theAccount" "account of mailbox of theMessage")
+      (apple/set "mailbox of theMessage" "mailbox \"Trash\" of theAccount"))
+     :message (format "deleting message %s..." id))
+    :timed? t))
+
 (cl-defmethod applemail-message/mark-read ((message applemail/message))
   "Mark MESSAGE as read and tell that to Mail."
-  (with-slots (id)
-      message
+  (with-slots (id) message
     (apple/execute!
      (apple/tell-application
       "Mail"
@@ -108,7 +117,7 @@
      (apple/tell-application
       "Mail"
       (apple/set "messageID" id)
-      "open first message of inbox whose id is messageID"))
+      "open first message of inbox whose subject is messageID"))
     nil))
 
 (defun applemail-message/sent-earlier? (message-one message-two)
