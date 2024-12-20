@@ -13,6 +13,11 @@
 (require 'applemail-utils)
 (require 'eieio)
 
+;;;###autoload
+(defvar *applemail/inbox*
+  nil
+  "Inbox to use - can be a sql regex, e.g. =all%mail=")
+
 (defconst *applemail-inbox-buffer* "*applemail - INBOX*")
 
 (defclass applemail-ui/inbox-messages ()
@@ -142,7 +147,7 @@
        (applemail/get-messages
 	:offset current-offset
 	:limit 50
-	:mailbox "all")
+	:mailbox *applemail/inbox*)
        inbox-messages))
     inbox-messages))
 
