@@ -80,7 +80,7 @@
     (let ((content (apple/execute!
 		    (apple/tell-application
 		     "Mail"
-		     (apple/set "theMessage" (format "first message of inbox whose id id %s" id))
+		     (apple/set "theMessage" (format "first message of inbox whose id is %s" id))
 		     (apple/return "content of theMessage"))
 		    :message "fetching message content..."
 		    :timed? t)))
