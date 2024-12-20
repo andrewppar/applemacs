@@ -47,6 +47,9 @@ Besides the databases mentioned above.
     (not (equal (plist-get event :title) "Ignored Event")))
 #+end_src
 
+** Mail
+- =*applemail/inbox*=: a SQL regex that matches against your mailboxes, e.g. "all%mail", leave as =nil= to use all mailboxes.
+
 * Keys and Bindings
 
 ** Mail
