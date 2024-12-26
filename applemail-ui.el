@@ -20,11 +20,21 @@
 
 (defconst *applemail-inbox-buffer* "*applemail - INBOX*")
 
+(defun applemail-ui--count-unread-messages (messages)
+  "Get the unread count of messages in MESSAGES."
+  (let ((result 0))
+    (dolist (message messages)
+      (when (applemail-message/read message)
+	(setq result (+ result 1))))
+    result))
+
 (defclass applemail-ui/inbox-messages ()
   ((messages :initarg :messages
 	     :type list
 	     :initform '()
 	     :documentation "The current messages of inbox.")
+   (unread-count :type number
+		 :initform 0)
    (field->max-value-size :type list
 			  :initform '())
    (selected-message :type applemail/message
@@ -37,6 +47,12 @@
 	     :type number
 	     :initform 500
 	     :documentation "The maximum size of inbox in memory.")))
+
+(cl-defmethod initialize-instance :after ((obj applemail-ui/inbox-messages) &rest _args)
+  (with-slots (messages) obj
+      (setf (slot-value obj 'unread-count)
+	    (applemail-ui--count-unread-messages messages))
+      obj))
 
 (cl-defmethod applemail-ui-inbox-messages/push
     ((message applemail/message)
