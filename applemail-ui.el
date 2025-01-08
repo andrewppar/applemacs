@@ -20,11 +20,21 @@
 
 (defconst *applemail-inbox-buffer* "*applemail - INBOX*")
 
+(defun applemail-ui--count-unread-messages (messages)
+  "Get the unread count of messages in MESSAGES."
+  (let ((result 0))
+    (dolist (message messages)
+      (when (applemail-message/read message)
+	(setq result (+ result 1))))
+    result))
+
 (defclass applemail-ui/inbox-messages ()
   ((messages :initarg :messages
 	     :type list
 	     :initform '()
 	     :documentation "The current messages of inbox.")
+   (unread-count :type number
+		 :initform 0)
    (field->max-value-size :type list
 			  :initform '())
    (selected-message :type applemail/message
@@ -37,6 +47,12 @@
 	     :type number
 	     :initform 500
 	     :documentation "The maximum size of inbox in memory.")))
+
+(cl-defmethod initialize-instance :after ((obj applemail-ui/inbox-messages) &rest _args)
+  (with-slots (messages) obj
+      (setf (slot-value obj 'unread-count)
+	    (applemail-ui--count-unread-messages messages))
+      obj))
 
 (cl-defmethod applemail-ui-inbox-messages/push
     ((message applemail/message)
@@ -195,11 +211,27 @@
   (declare (indent 0))
   `(let ((inhibit-read-only t)) ,@body))
 
+;; maybe this should be in the mode line
+(defun applemail-ui--insert-inbox-info (messages-to-show)
+  (let* ((title (applemail-ui--color-text "APPLEMACS INBOX" "light blue"))
+	 (unread-count (length (seq-filter
+				(lambda (message)
+				  (not (applemail-message/read message)))
+				messages-to-show))))
+    (insert
+     (string-join
+      (list title
+	    (format "Unread Messages: %s" unread-count)
+	    (format "Shown MessageS: %s" (length messages-to-show))
+	    ""
+	    "")
+      "\n"))))
+
 (defun applemail-ui--insert-inbox-header ()
   "Insert the inbox header for UI."
   (let ((maxes '((subject . 100) (sender . 60) (sent . 100000)))
 	(header-list '("read" "id   ")))
-    (with-slots (field->max-value-size)
+    (with-slots (field->max-value-size messages)
 	*applemail-ui/inbox-messages*
       (dolist (column '(subject sender sent))
 	(let ((col-max (min (alist-get column maxes)
@@ -209,13 +241,9 @@
 	   (format "%s%s" col-string
 		   (make-string (- (- col-max (length col-string)) 1) ?\ ))
 	   header-list)))
-      (let ((header (format "%s" (string-join (reverse header-list) "| "))))
-	(insert header)
-	(insert "\n")
-	(insert  (applemail-ui--color-text
-		  (make-string (length header) ?=)
-		  "blue"))
-	(insert "\n")))))
+      (let* ((header (format "%s" (string-join (reverse header-list) "| ")))
+	     (div (applemail-ui--color-text (make-string (length header) ?=) "blue")))
+	(insert (string-join (list header div "") "\n"))))))
 
 (defun applemail-ui--color-text (text color)
   "Add COLOR to TEXT."
@@ -251,33 +279,37 @@
   (let ((message (gensym)))
     `(let ((,message (applemail-ui--message-at-point)))
        (progn ,@body)
-       (when ,message
-	 (applemail-ui-inbox-messages/set-selected-message ,message *applemail-ui/inbox-messages*)
-	 (applemail-ui--goto-message
-	  (applemail-ui-inbox-messages/selected-message
-	   *applemail-ui/inbox-messages*))))))
+       (if ,message
+	   (progn
+	     (applemail-ui-inbox-messages/set-selected-message ,message *applemail-ui/inbox-messages*)
+	     (applemail-ui--goto-message
+	      (applemail-ui-inbox-messages/selected-message
+	       *applemail-ui/inbox-messages*)))
+	 (goto-char (point-min))))))
 
-(defun applemail-display/refresh-inbox (&optional fetch-new?)
+(defun applemail-display/refresh-inbox (&optional fetch-new? filter-fn)
   "Show the first 20 messages of the current inbox.
 Optionally fetch new ones with FETCH-NEW?"
   (interactive)
-  (delete-other-windows)
-  (switch-to-buffer *applemail-inbox-buffer*)
-  (save-inbox-excursion
-    (setq buffer-read-only t)
-    (with-inhibit-read-only
-      (hl-line-mode)
-      (applemail-inbox-mode)
-      (kill-region (point-min) (point-max))
-      (when fetch-new?
-	(applemail-ui-inbox-messages/fetch-new
-	 *applemail-ui/inbox-messages*))
-      (with-slots (messages)
-	  (applemail-ui-inbox-messages/sort
-	   *applemail-ui/inbox-messages* #'applemail-message/sent-later?)
-	(applemail-ui--insert-inbox-header)
-	(dolist (message messages)
-	  (insert (applemail-ui--prep-message-to-insert message)))))))
+  (let ((filter-function (or filter-fn #'identity)))
+    (delete-other-windows)
+    (switch-to-buffer *applemail-inbox-buffer*)
+    (save-inbox-excursion
+      (setq buffer-read-only t)
+      (with-inhibit-read-only
+	(hl-line-mode)
+	(applemail-inbox-mode)
+	(kill-region (point-min) (point-max))
+	(when fetch-new?
+	  (applemail-ui-inbox-messages/fetch-new *applemail-ui/inbox-messages*))
+	(with-slots (messages)
+	    (applemail-ui-inbox-messages/sort
+	     *applemail-ui/inbox-messages* #'applemail-message/sent-later?)
+	  (let ((shown-messages (seq-filter filter-function messages)))
+	    (applemail-ui--insert-inbox-info shown-messages)
+	    (applemail-ui--insert-inbox-header)
+	    (dolist (message shown-messages)
+	      (insert (applemail-ui--prep-message-to-insert message)))))))))
 
 (defconst *applemail-message-buffer* "*applemail - MESSAGE*")
 
@@ -366,14 +398,21 @@ Optionally fetch new ones with FETCH-NEW?"
   (when-let ((message (applemail-ui--message-at-point)))
     (applemail-ui-inbox-messages/push-marked-message
      message *applemail-ui/inbox-messages*)
-    (applemail-ui--mark-message-row nil)))
+    (applemail-ui--mark-message-row nil)
+    (forward-line)))
 
 (defun applemail-display/unmark-message ()
   (interactive)
   (when-let ((message (applemail-ui--message-at-point)))
     (applemail-ui-inbox-messages/remove-marked-message
      message *applemail-ui/inbox-messages*)
-    (applemail-ui--mark-message-row t)))
+    (applemail-ui--mark-message-row t)
+    (forward-line)))
+
+(defun applemail-display/filter-unread ()
+  (interactive)
+  (applemail-display/refresh-inbox
+   nil (lambda (message) (not (applemail-message/read message)))))
 
 (defun applemail-display/open-in-mail ()
   "View the messsage at point in the Mail app."
@@ -393,6 +432,7 @@ Optionally fetch new ones with FETCH-NEW?"
   (kbd "RET") 'applemail-display/open-message
   "D" 'applemail-display/delete-marked
   "f" (lambda () (interactive) (applemail-display/refresh-inbox t))
+  "U" 'applemail-display/filter-unread
   "m" 'applemail-display/mark-message
   "o" 'applemail-display/open-in-mail
   "q" 'applemail-display/inbox-quit
