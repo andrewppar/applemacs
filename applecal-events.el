@@ -104,6 +104,17 @@
 			   (push new-event result))))))))))
     result))
 
+(defun applecal-events--replace-original-projections (events)
+  (let ((supplanted '()))
+    (dolist (event events)
+      (cl-destructuring-bind (&key ROWID orig_item_id &allow-other-keys)
+	  event
+	(when (or (= ROWID orig_item_id) (= orig_item_id 0))
+	  (push orig_item_id supplanted))))
+    (seq-filter
+     (lambda (event) (not (member (plist-get event :ROWID) supplanted)))
+     events)))
+
 (defun applecal-events--equal? (event-one event-two)
   "Check if EVENT-ONE and EVENT-TWO have the same start, end, and title."
  (cl-destructuring-bind (&key start_date end_date title &allow-other-keys)
@@ -206,6 +217,7 @@ START-DATE are gathered."
       (applecal-events--filter-by-date start-time end-time)
       applecal-events--convert-times
       (applecal-events--filter-projected-events decoded-start decoded-end)
+      applecal-events--replace-original-projections
       applecal-events--apply-custom-transform
       applecal-events--dedupe-events)))
 
