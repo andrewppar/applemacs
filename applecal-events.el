@@ -109,7 +109,7 @@
     (dolist (event events)
       (cl-destructuring-bind (&key ROWID orig_item_id &allow-other-keys)
 	  event
-	(when (or (= ROWID orig_item_id) (= orig_item_id 0))
+	(unless (and (= ROWID orig_item_id) (= orig_item_id 0))
 	  (push orig_item_id supplanted))))
     (seq-filter
      (lambda (event) (not (member (plist-get event :ROWID) supplanted)))
