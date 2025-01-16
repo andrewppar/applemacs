@@ -107,12 +107,22 @@
 (defun applecal-events--replace-original-projections (events)
   (let ((supplanted '()))
     (dolist (event events)
-      (cl-destructuring-bind (&key ROWID orig_item_id &allow-other-keys)
+      (cl-destructuring-bind (&key ROWID orig_item_id orig_date &allow-other-keys)
 	  event
-	(unless (and (= ROWID orig_item_id) (= orig_item_id 0))
-	  (push orig_item_id supplanted))))
+	(when (and (not (= ROWID orig_item_id))
+		   (not (= orig_item_id 0)))
+	  (let* ((start-date (apple-time/appletime->emacs orig_date))
+		 (entry (list :row-id orig_item_id :start start-date)))
+	    (push entry supplanted)))))
     (seq-filter
-     (lambda (event) (not (member (plist-get event :ROWID) supplanted)))
+     (lambda (event)
+       (not
+	(seq-some
+	 (lambda (supplant)
+	   (cl-destructuring-bind (&key row-id start) supplant
+	     (and (equal (plist-get event :ROWID) row-id)
+		  (equal (plist-get event :start_date) start))))
+	 supplanted)))
      events)))
 
 (defun applecal-events--equal? (event-one event-two)
