@@ -13,7 +13,6 @@
 (require 'applescript)
 (require 'apple-db)
 (require 'apple-time)
-(require 'f)
 (require 'eieio)
 (require 'cl)
 
